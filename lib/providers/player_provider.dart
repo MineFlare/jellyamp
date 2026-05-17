@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:just_audio_background/just_audio_background.dart';
 import 'package:smtc_windows/smtc_windows.dart';
 import '../models/jellyfin_models.dart';
 import '../services/jellyfin_api.dart';
@@ -145,10 +144,7 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final useBackground = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-
-      final sources = songs.asMap().entries.map((entry) {
-        final song = entry.value;
+      final sources = songs.map((song) {
         final uri = song.isDownloaded && song.localPath != null
             ? Uri.file(song.localPath!)
             : Uri.parse(api.getStreamUrl(song.id));
@@ -160,21 +156,6 @@ class PlayerProvider extends ChangeNotifier {
                     'MediaBrowser Client="JellyAmp", Device="Flutter", '
                     'DeviceId="jellyamp-flutter", Version="1.0.0", Token="${api.token}"',
               };
-
-        if (useBackground) {
-          return AudioSource.uri(
-            uri,
-            headers: headers,
-            tag: MediaItem(
-              id: song.id,
-              title: song.name,
-              artist: song.artistName ?? '',
-              album: song.albumName ?? '',
-              artUri: Uri.parse(api.getImageUrl(song.albumId ?? song.id)),
-              duration: song.duration,
-            ),
-          );
-        }
 
         return AudioSource.uri(uri, headers: headers);
       }).toList();
