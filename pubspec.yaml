@@ -1,0 +1,31 @@
+name: jellyamp
+description: Jellyfin music client
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  just_audio: ^0.9.40
+  just_audio_media_kit: ^2.1.0
+  media_kit_libs_windows_audio: ^1.0.2
+  provider: ^6.1.2
+  dio: ^5.7.0
+  shared_preferences: ^2.3.3
+  path_provider: ^2.1.5
+  sqflite: ^2.3.3+1
+  sqflite_common_ffi: ^2.3.4
+  path: ^1.9.0
+  cached_network_image: ^3.4.1
+  palette_generator: ^0.3.3+3
+  flutter_cache_manager: ^3.4.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
