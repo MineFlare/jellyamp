@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
@@ -21,6 +22,16 @@ Future<void> main() async {
       windows: Platform.isWindows,
       linux: Platform.isLinux,
       macOS: Platform.isMacOS,
+    );
+  }
+
+  if (!kIsWeb && (Platform.isAndroid || Platform.isIOS)) {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'app.mineflare.jellyamp.audio',
+      androidNotificationChannelName: 'JellyAmp',
+      androidNotificationOngoing: true,
+      androidStopForegroundOnPause: true,
+      notificationColor: const Color(0xFF1DB954),
     );
   }
 
@@ -71,8 +82,9 @@ class _RootState extends State<_Root> {
     if (!_connectivityWired) {
       _connectivityWired = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        context.read<AuthProvider>().attachConnectivity(
-            context.read<ConnectivityService>());
+        context
+            .read<AuthProvider>()
+            .attachConnectivity(context.read<ConnectivityService>());
       });
     }
 

@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
+import 'package:smtc_windows/smtc_windows.dart';
 import '../models/jellyfin_models.dart';
 import '../services/jellyfin_api.dart';
 
 class PlayerProvider extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
+  SMTCWindows? _smtc;
 
   List<Song> _queue = [];
   int _currentIndex = 0;
@@ -35,6 +39,8 @@ class PlayerProvider extends ChangeNotifier {
   Stream<Duration?> get durationStream => _player.durationStream;
 
   PlayerProvider() {
+    _initSmtc();
+
     _player.currentIndexStream.listen((index) {
       if (index != null && index != _currentIndex) {
         _currentIndex = index;
@@ -45,6 +51,7 @@ class PlayerProvider extends ChangeNotifier {
         if (_api != null && _queue.isNotEmpty) {
           _loadLyrics(_queue[index]);
           _api!.reportPlaybackStart(_queue[index].id);
+          _updateSmtcMetadata(_queue[index]);
         }
       }
     });
@@ -58,6 +65,7 @@ class PlayerProvider extends ChangeNotifier {
           _player.play();
         }
       }
+      _updateSmtcPlaybackStatus(state);
       notifyListeners();
     });
 
@@ -68,6 +76,62 @@ class PlayerProvider extends ChangeNotifier {
         notifyListeners();
       },
     );
+  }
+
+  void _initSmtc() {
+    if (kIsWeb || !Platform.isWindows) return;
+    _smtc = SMTCWindows(
+      config: const SMTCConfig(
+        fastForwardEnabled: false,
+        nextEnabled: true,
+        pauseEnabled: true,
+        playEnabled: true,
+        rewindEnabled: false,
+        prevEnabled: true,
+        stopEnabled: false,
+      ),
+    );
+    _smtc!.buttonPressStream.listen((event) {
+      switch (event) {
+        case PressedButton.play:
+          _player.play();
+        case PressedButton.pause:
+          _player.pause();
+        case PressedButton.next:
+          _player.seekToNext();
+        case PressedButton.previous:
+          skipPrevious();
+        default:
+          break;
+      }
+    });
+  }
+
+  void _updateSmtcMetadata(Song song) {
+    if (_smtc == null) return;
+    _smtc!.updateMetadata(MusicMetadata(
+      title: song.name,
+      artist: song.artistName ?? '',
+      albumArtist: song.artistName ?? '',
+      album: song.albumName ?? '',
+    ));
+    _smtc!.setPlaybackStatus(PlaybackStatus.Playing);
+    _smtc!.enableSmtc();
+  }
+
+  void _updateSmtcPlaybackStatus(PlayerState state) {
+    if (_smtc == null) return;
+    if (state.playing) {
+      _smtc!.setPlaybackStatus(PlaybackStatus.Playing);
+    } else {
+      switch (state.processingState) {
+        case ProcessingState.idle:
+        case ProcessingState.completed:
+          _smtc!.setPlaybackStatus(PlaybackStatus.Stopped);
+        default:
+          _smtc!.setPlaybackStatus(PlaybackStatus.Paused);
+      }
+    }
   }
 
   Future<void> playQueue(List<Song> songs, int startIndex, JellyfinApi api) async {
@@ -81,18 +145,38 @@ class PlayerProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final sources = songs.map((song) {
-        if (song.isDownloaded && song.localPath != null) {
-          return AudioSource.uri(Uri.file(song.localPath!));
+      final useBackground = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+      final sources = songs.asMap().entries.map((entry) {
+        final song = entry.value;
+        final uri = song.isDownloaded && song.localPath != null
+            ? Uri.file(song.localPath!)
+            : Uri.parse(api.getStreamUrl(song.id));
+
+        final headers = song.isDownloaded
+            ? null
+            : {
+                'X-Emby-Authorization':
+                    'MediaBrowser Client="JellyAmp", Device="Flutter", '
+                    'DeviceId="jellyamp-flutter", Version="1.0.0", Token="${api.token}"',
+              };
+
+        if (useBackground) {
+          return AudioSource.uri(
+            uri,
+            headers: headers,
+            tag: MediaItem(
+              id: song.id,
+              title: song.name,
+              artist: song.artistName ?? '',
+              album: song.albumName ?? '',
+              artUri: Uri.parse(api.getImageUrl(song.albumId ?? song.id)),
+              duration: song.duration,
+            ),
+          );
         }
-        return AudioSource.uri(
-          Uri.parse(api.getStreamUrl(song.id)),
-          headers: {
-            'X-Emby-Authorization':
-                'MediaBrowser Client="JellyAmp", Device="Flutter", '
-                'DeviceId="jellyamp-flutter", Version="1.0.0", Token="${api.token}"',
-          },
-        );
+
+        return AudioSource.uri(uri, headers: headers);
       }).toList();
 
       await _player.setAudioSource(
@@ -103,6 +187,7 @@ class PlayerProvider extends ChangeNotifier {
       await _player.play();
 
       _loadLyrics(songs[startIndex]);
+      _updateSmtcMetadata(songs[startIndex]);
       api.reportPlaybackStart(songs[startIndex].id);
     } catch (e) {
       _error = 'Failed to load audio: ${e.toString()}';
@@ -177,6 +262,8 @@ class PlayerProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _smtc?.disableSmtc();
+    _smtc?.dispose();
     _player.dispose();
     super.dispose();
   }
