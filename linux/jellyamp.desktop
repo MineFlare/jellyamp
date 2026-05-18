@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=JellyAmp
+Comment=Jellyfin music client
+Exec=jellyamp
+Icon=/path/to/linux/icons/icon.png
+Type=Application
+Categories=Audio;Music;Player;
